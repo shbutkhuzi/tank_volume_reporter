@@ -3,7 +3,7 @@
 Following are main components of the hardware:
 
 - STM32F103B8T6
-> **Info:** Microcontroller
+> **Info:** Microcontroller\n
 > **Note:** Board used here is Blue Pill, but the microcontroller is replaced with 128Kb version (B8T6)
 - SIM800L
 > **Info:** GSM/GPRS module used for communication
