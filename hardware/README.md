@@ -18,3 +18,6 @@ Following are main components of the hardware:
 > DC-DC step up converter
 - 18650 Lipo battery
 > Just battery
+
+## Module inside
+![module inside](https://github.com/shbutkhuzi/tank_volume_reporter/blob/main/hardware/image_2.jpg?raw=true)
