@@ -642,6 +642,31 @@ general_status process_admin_cmd(char* admin, char* cmd){
 		if(!SIM800L_SMS(admin, sendStr, 1)){
 			return SIM800_ERROR_SENDING_SMS;
 		}
+	}else if((strncmp(cmd, "cmd:SIM800L_SMS:", 16) == 0)){
+		char number[20] = {};
+		char message[1024] = {};
+		char sendStr[1200];
+
+		uint8_t parsed_items = sscanf(cmd, "cmd:SIM800L_SMS:%[^,],%1024c", number, message);
+
+		if(parsed_items == 2){
+			D(printf("number: %s\n", number));
+			D(printf("message: %s\n", message));
+
+			if(!SIM800L_SMS(number, message, 0)){
+				return SIM800_ERROR_SENDING_SMS;
+			}
+
+			sprintf(sendStr, "Message sended successfully\nnumber: %s\ncontent: %s", number, message);
+			if(!SIM800L_SMS(admin, sendStr, 1)){
+				return SIM800_ERROR_SENDING_SMS;
+			}
+		}else{
+			sprintf(sendStr, "Parse unsuccessful\nnumber: %s\ncontent: %s\nmatched_items: %d\n", number, message, parsed_items);
+			if(!SIM800L_SMS(admin, sendStr, 1)){
+				return SIM800_ERROR_SENDING_SMS;
+			}
+		}
 	}else if((strncmp(cmd, "cmd:read_all_conf", 17) == 0)){
 		char confs[CONF_REPORT_MAX_LENGTH];
 		read_all_conf(confs);
