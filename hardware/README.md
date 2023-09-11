@@ -19,6 +19,10 @@ Following are main components of the hardware:
 - 18650 Lipo battery
 > Just battery
 
-## Module from inside
-![module inside](https://github.com/shbutkhuzi/tank_volume_reporter/blob/main/hardware/image_2.jpg?raw=true)
+## Photoes of the module
+![image 1](https://github.com/shbutkhuzi/tank_volume_reporter/blob/main/hardware/image_1.jpg?raw=true)
+![image 2](https://github.com/shbutkhuzi/tank_volume_reporter/blob/main/hardware/image_2.jpg?raw=true)
+![image 3](https://github.com/shbutkhuzi/tank_volume_reporter/blob/main/hardware/image_3.jpg?raw=true)
+![image 4](https://github.com/shbutkhuzi/tank_volume_reporter/blob/main/hardware/image_4.jpg?raw=true)
+![image 5](https://github.com/shbutkhuzi/tank_volume_reporter/blob/main/hardware/image_5.jpg?raw=true)
 
