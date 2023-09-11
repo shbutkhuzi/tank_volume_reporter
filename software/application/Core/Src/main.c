@@ -448,8 +448,8 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
-	  D(printf("Into Error_Handler\n"));
-	  HAL_Delay(1000);
+	  D(printf("Into Error_Handler\nRestarting..."));
+	  NVIC_SystemReset();
   }
   /* USER CODE END Error_Handler_Debug */
 }
