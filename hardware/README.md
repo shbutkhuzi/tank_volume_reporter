@@ -21,3 +21,6 @@ Following are main components of the hardware:
 
 ## Module from inside
 ![module inside](https://github.com/shbutkhuzi/tank_volume_reporter/blob/main/hardware/image_2.jpg?raw=true)
+
+## Circuit Schematics
+![circuit schematics](https://github.com/shbutkhuzi/tank_volume_reporter/blob/main/hardware/schematics.pdf?raw=true)
