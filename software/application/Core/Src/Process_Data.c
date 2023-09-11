@@ -29,6 +29,7 @@ uint8_t rate_of_change_enable = 0;
 uint8_t batch_data_send_enable = 0;
 uint8_t log_requested_num_en = 0;
 char 	mobile_country_code[5] = {};
+uint8_t restart_flag = 0;
 
 extern volatile uint16_t min_distance;
 extern volatile uint16_t max_distance;
@@ -144,6 +145,11 @@ void check_requests(){
 		if(!SIM800L_Delete_Message(index)){
 			D(printf("Message delete failed at index: %d\n", index));
 			return;
+		}
+
+		if(restart_flag){
+			restart_flag = 0;
+			NVIC_SystemReset();
 		}
 	}
 
@@ -607,7 +613,7 @@ general_status process_admin_cmd(char* admin, char* cmd){
 		char* terminationPos = strchr(cmd, '\r');
 		uint8_t numChars = terminationPos - (cmd+22);
 		strncpy(time, cmd+22, numChars);
-		sscanf(time, "%02u:%02u%02u", (uint *)&wakeup.hour, (uint *)&wakeup.minute, (uint *)&wakeup.second);
+		sscanf(time, "%02u:%02u:%02u", (uint *)&wakeup.hour, (uint *)&wakeup.minute, (uint *)&wakeup.second);
 		EEPROM_enable();
 		write_wakeup_time(wakeup, 0);
 		wakeup_time = read_wakeup_time(0);
@@ -624,7 +630,7 @@ general_status process_admin_cmd(char* admin, char* cmd){
 		char* terminationPos = strchr(cmd, '\r');
 		uint8_t numChars = terminationPos - (cmd+23);
 		strncpy(time, cmd+23, numChars);
-		sscanf(time, "%02u:%02u%02u", (uint *)&standby.hour, (uint *)&standby.minute, (uint *)&standby.second);
+		sscanf(time, "%02u:%02u:%02u", (uint *)&standby.hour, (uint *)&standby.minute, (uint *)&standby.second);
 		EEPROM_enable();
 		write_standby_time(standby, 0);
 		standby_time = read_standby_time(0);
@@ -667,6 +673,8 @@ general_status process_admin_cmd(char* admin, char* cmd){
 				return SIM800_ERROR_SENDING_SMS;
 			}
 		}
+	}else if((strncmp(cmd, "cmd:restart_STM", 15) == 0)){
+		restart_flag = 1;
 	}else if((strncmp(cmd, "cmd:read_all_conf", 17) == 0)){
 		char confs[CONF_REPORT_MAX_LENGTH];
 		read_all_conf(confs);
