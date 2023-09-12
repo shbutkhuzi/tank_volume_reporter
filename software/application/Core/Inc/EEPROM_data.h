@@ -32,7 +32,16 @@ uint8_t write_log_requested_num_mode(uint8_t mode, uint8_t auto_en);
 uint8_t read_log_requested_num_mode(uint8_t auto_en);
 uint8_t write_standby_mode_enable(uint8_t mode, uint8_t auto_en);
 uint8_t read_standby_mode_enable(uint8_t auto_en);
+uint8_t write_subscription_enable(uint8_t mode, uint8_t auto_en);
+uint8_t read_subscription_enable(uint8_t auto_en);
 
+uint8_t write_current_page(uint16_t curr_page, uint8_t auto_en);
+uint16_t read_current_page(uint8_t auto_en);
+uint8_t write_page_start(uint16_t page_start, uint8_t auto_en);
+uint16_t read_page_start(uint8_t auto_en);
+uint8_t write_page_end(uint16_t page_end, uint8_t auto_en);
+uint16_t read_page_end(uint8_t auto_en);
+uint8_t read_subscr_meta_info(uint16_t* page_start, uint16_t* current_page, uint16_t* page_end, uint8_t auto_en);
 uint8_t write_mobile_country_code(char * code, uint8_t auto_en);
 uint8_t read_mobile_country_code(char * code, uint8_t auto_en);
 uint8_t read_APN(char * APN, uint8_t auto_en);
@@ -78,6 +87,8 @@ general_status write_key_word(uint8_t index, char* key_word, uint8_t auto_en);
 
 uint8_t read_all_conf(char* conf);
 general_status EEPROM_set_to_default();
+
+void display_mem(void* mem, int mem_size, int line_len);
 
 
 #endif /* INC_EEPROM_DATA_H_ */

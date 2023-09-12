@@ -292,6 +292,8 @@ uint8_t SIM800L_SMS(char * phone, char * message, uint8_t time_append){
 		strcat(phone_str, phone);
 	}else if(mobile_format == 13){
 		strcpy(phone_str, phone);
+	}else{
+		strcpy(phone_str, phone);
 	}
 
 	char cmd_temp[50] = {};

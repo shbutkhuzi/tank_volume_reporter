@@ -27,7 +27,13 @@
  * PAGE 20:
  * PAGE 21: 	key_word 1 (whole page)
  * PAGE 22:		key_word 2 (whole page)
- *
+ * PAGE 23:
+ * PAGE 24:     subscription_enable											page_start								current_page						   page_end
+ * PAGE 25:		0-7:user_number(8 bytes), 8:enable(1byte), 9-14:lower_limits(6bytes), 15-20:upper_limits(6bytes), 21-22:send_count(2bytes), 23-30:last_reached_time(8bytes)
+ * .
+ * .
+ * .
+ * PAGE 127:	0-7:user_number(8 bytes), 8:enable(1byte), 9-14:lower_limits(6bytes), 15-20:upper_limits(6bytes), 21-22:send_count(2bytes), 23-30:last_reached_time(8bytes)
  */
 
 #include "EEPROM.h"
@@ -50,6 +56,7 @@ extern uint8_t bootloader_restart;
 extern uint8_t answer_to_requests_enable;
 extern uint8_t ds18b20_measurements_enable;
 extern uint8_t log_requested_num_en;
+extern uint8_t subscription_enable;
 extern char mobile_country_code[5];
 
 extern uint8_t rate_of_change_enable;
@@ -196,6 +203,77 @@ uint8_t read_standby_mode_enable(uint8_t auto_en){
 	EEPROM_Read(0, 8, &mode, 1);
 	if(auto_en) EEPROM_disable();
 	return mode;
+}
+
+uint8_t write_subscription_enable(uint8_t mode, uint8_t auto_en){
+	if(auto_en) EEPROM_enable();
+	EEPROM_Write(24, 0, &mode, 1);
+	if(auto_en) EEPROM_disable();
+	return 1;
+}
+
+uint8_t read_subscription_enable(uint8_t auto_en){
+	uint8_t mode;
+	if(auto_en) EEPROM_enable();
+	EEPROM_Read(24, 0, &mode, 1);
+	if(auto_en) EEPROM_disable();
+	return mode;
+}
+
+uint8_t write_current_page(uint16_t curr_page, uint8_t auto_en){
+	if(auto_en) EEPROM_enable();
+	EEPROM_Write(24, 8, (uint8_t *)&curr_page, 2);
+	if(auto_en) EEPROM_disable();
+	return 1;
+}
+
+uint16_t read_current_page(uint8_t auto_en){
+	uint16_t curr_page;
+	if(auto_en) EEPROM_enable();
+	EEPROM_Read(24, 8, (uint8_t *)&curr_page, 2);
+	if(auto_en) EEPROM_disable();
+	return curr_page;
+}
+
+uint8_t write_page_start(uint16_t page_start, uint8_t auto_en){
+	if(auto_en) EEPROM_enable();
+	EEPROM_Write(24, 4, (uint8_t *)&page_start, 2);
+	if(auto_en) EEPROM_disable();
+	return 1;
+}
+
+uint16_t read_page_start(uint8_t auto_en){
+	uint16_t page_start;
+	if(auto_en) EEPROM_enable();
+	EEPROM_Read(24, 4, (uint8_t *)&page_start, 2);
+	if(auto_en) EEPROM_disable();
+	return page_start;
+}
+
+uint8_t write_page_end(uint16_t page_end, uint8_t auto_en){
+	if(auto_en) EEPROM_enable();
+	EEPROM_Write(24, 12, (uint8_t *)&page_end, 2);
+	if(auto_en) EEPROM_disable();
+	return 1;
+}
+
+uint16_t read_page_end(uint8_t auto_en){
+	uint16_t page_end;
+	if(auto_en) EEPROM_enable();
+	EEPROM_Read(24, 12, (uint8_t *)&page_end, 2);
+	if(auto_en) EEPROM_disable();
+	return page_end;
+}
+
+uint8_t read_subscr_meta_info(uint16_t* page_start, uint16_t* current_page, uint16_t* page_end, uint8_t auto_en){
+	char page_data[PAGESIZE];
+	if(auto_en) EEPROM_enable();
+	EEPROM_Read(24, 0, (uint8_t *)page_data, PAGESIZE);
+	*page_start = ((*(page_data+4)) | *(page_data+5) >> 8);
+	*current_page = ((*(page_data+8)) | *(page_data+9) >> 8);
+	*page_end = ((*(page_data+12)) | *(page_data+13) >> 8);
+	if(auto_en) EEPROM_disable();
+	return 1;
 }
 
 /*
@@ -671,6 +749,8 @@ uint8_t read_all_conf(char* conf){
 	sprintf(conf + strlen(conf), "req log:   %d\n", log_requested_num_en);   // log requested numbers enable
 	standby_mode_enable = read_standby_mode_enable(0);
 	sprintf(conf + strlen(conf), "standby:   %d\n", standby_mode_enable);   // standby mode enable
+	subscription_enable = read_subscription_enable(0);
+	sprintf(conf + strlen(conf), "subs en:   %d\n", subscription_enable);
 	min_distance = read_min_distance(0);
 	sprintf(conf + strlen(conf), "min d:     %d\n", min_distance);  // min distance
 	max_distance = read_max_distance(0);
@@ -740,6 +820,7 @@ general_status EEPROM_set_to_default(){
 	write_batch_data_send_mode(1, 0);
 	write_log_requested_num_mode(0, 0);
 	write_standby_mode_enable(1, 0);
+	write_subscription_enable(1, 0);
 	write_min_distance(30, 0);
 	write_max_distance(1850, 0);
 	write_cylinder_height(1.63, 0);
@@ -767,3 +848,69 @@ general_status EEPROM_set_to_default(){
 
 	return OK;
 }
+
+
+void display_mem(void* mem, int mem_size, int line_len) {
+   /*
+		mem 		- pointer to beggining of memory region to be printed
+		mem_size 	- number of bytes mem points to
+		line_len	- number of bytyes to display per line
+   */
+
+ 	unsigned char* data = mem;
+ 	int full_lines = mem_size / line_len;
+ 	unsigned char* addr = mem;
+
+ 	for (int linno = 0; linno < full_lines; linno++) {
+ 		// Print Address
+ 		printf("0x%x\t", (unsigned int)addr);
+
+ 		// Print Hex
+ 		for (int i = 0; i < line_len; i++) {
+ 			printf(" %02x", data[linno*line_len + i]);
+ 		}
+ 		printf("\t");
+
+ 		// Print Ascii
+ 		for (int i = 0; i < line_len; i++) {
+ 		    char c = data[linno*line_len + i];
+ 		    if ( 32 < c && c < 125) {
+ 			    printf(" %c", c);
+ 		    }
+ 		    else {
+ 		        printf(" .");
+ 		    }
+ 		}
+ 		printf("\n");
+
+ 		addr += line_len;
+ 	}
+
+ 	// Print any remaining bytes that couldn't make a full line
+ 	int remaining = mem_size % line_len;
+ 	if (remaining > 0) {
+ 	    // Print Address
+ 	    printf("0x%x\t", (unsigned int)addr);
+
+ 	    // Print Hex
+ 	    for (int i = 0; i < remaining; i++) {
+ 	        printf(" %02x", data[line_len*full_lines + i]);
+    	}
+    	for (int i = 0; i < line_len - remaining; i++) {
+    	    printf("  ");
+    	}
+    	printf("\t");
+
+    	// Print Hex
+ 	    for (int i = 0; i < remaining; i++) {
+ 	        char c = data[line_len*full_lines + i];
+ 	        if ( 32 < c && c < 125) {
+ 			    printf(" %c", c);
+ 		    }
+ 		    else {
+ 		        printf(" .");
+ 		    }
+    	}
+    	printf("\n");
+ 	}
+ }

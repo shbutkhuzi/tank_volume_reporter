@@ -51,6 +51,7 @@ extern uint16_t a02yyuw_measurement;
 extern uint8_t ds18b20_precense_flag;
 
 extern uint8_t standby_mode_enable;
+extern uint8_t subscription_enable;
 
 extern struct standby_alarm wakeup_time;
 extern struct standby_alarm standby_time;
@@ -603,6 +604,23 @@ general_status process_admin_cmd(char* admin, char* cmd){
 		EEPROM_disable();
 		char sendStr[50];
 		sprintf(sendStr, "read_standby_mode_enable:%d", standby_mode_enable);
+		if(!SIM800L_SMS(admin, sendStr, 1)){
+			return SIM800_ERROR_SENDING_SMS;
+		}
+	}else if((strncmp(cmd, "cmd:write_subscription_enable:", 30) == 0)){
+		char subs[2] = {};
+		uint8_t mode;
+
+		char* terminationPos = strchr(cmd, '\r');
+		uint8_t numChars = terminationPos - (cmd+30);
+		strncpy(subs, cmd+30, numChars);
+		mode = string_to_number(subs);
+		EEPROM_enable();
+		write_subscription_enable(mode, 0);
+		subscription_enable = read_subscription_enable(0);
+		EEPROM_disable();
+		char sendStr[50];
+		sprintf(sendStr, "read_subscription_enable:%d", subscription_enable);
 		if(!SIM800L_SMS(admin, sendStr, 1)){
 			return SIM800_ERROR_SENDING_SMS;
 		}

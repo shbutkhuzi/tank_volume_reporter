@@ -41,6 +41,7 @@
 #include "predict.h"
 #include "EEPROM.h"
 #include "critical.h"
+#include "client_subscription.h"
 
 /* USER CODE END Includes */
 
@@ -227,7 +228,6 @@ int main(void)
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, 0xFFFF);
   // initial value for answering requests periodically
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2, 0xFFFF);
-
 
   general_status ret;
   ret = critical_check();
