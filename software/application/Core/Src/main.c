@@ -229,6 +229,111 @@ int main(void)
   // initial value for answering requests periodically
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2, 0xFFFF);
 
+
+
+//  general_status rett;
+//
+//  rett = delete_user("995598933675");
+//  printf("delete_user returned: %d\n", rett);
+//
+//  rett = delete_user("995598933845");
+//  printf("delete_user returned: %d\n", rett);
+//
+//  rett = delete_user("995598933846");
+//  printf("delete_user returned: %d\n", rett);
+//
+//  rett = add_user("+995598933845", "2000(V),180(T)", "12000(V),60(T)");
+//  printf("add_user returned: %d\n", rett);
+//
+//  rett = add_user("+995598933846", "3000(V),180(V),50(T)", "240(T),12000(V),60(T)");
+//  printf("add_user returned: %d\n", rett);
+//
+//  rett = add_user("+995598933675", "5000(V),240(T)", "2031(V)");
+//  printf("add_user returned: %d\n", rett);
+//
+//  rett = read_user("+995598933845");
+//  printf("read_user returned: %d\n", rett);
+//
+//  rett = read_user("+995598933675");
+//  printf("read_user returned: %d\n", rett);
+//
+//  rett = read_user("+995598933846");
+//  printf("read_user returned: %d\n", rett);
+//
+//  rett = write_user_enable("+995598933675", 0);
+//  printf("write_user_enable returned: %d\n", rett);
+//
+//  rett = write_user_enable("+995598933845", 0);
+//  printf("write_user_enable returned: %d\n", rett);
+//
+//  rett = read_user("+995598933845");
+//  printf("read_user returned: %d\n", rett);
+//
+//  rett = write_user_enable("+995598933845", 1);
+//  printf("write_user_enable returned: %d\n", rett);
+//
+//  rett = update_user("+995598933675", "7020(V),2400(V),200(T)", "100(T),15000(V)");
+//  printf("update_user returned: %d\n", rett);
+//
+//  rett = update_user("+995598933845", "100(T),1800(V),120(T)", "10(T),6000(V),15000(V)");
+//  printf("update_user returned: %d\n", rett);
+//
+//  rett = read_user("+995598933845");
+//  printf("read_user returned: %d\n", rett);
+//
+//  rett = read_user("+995598933675");
+//  printf("read_user returned: %d\n", rett);
+//
+//  rett = read_user("+995598933846");
+//  printf("read_user returned: %d\n", rett);
+//
+//
+//  while(1){}
+
+
+
+
+//  uint32_t tickstart;
+//  	uint8_t buffer_a02[A02YYUW_RX_SIZE];
+////  	uint16_t a02yyuw_measurement = 0;
+//  	uint8_t trials = 0;
+//  	uint16_t distance;
+//
+//	HAL_GPIO_WritePin(A02_CONTROL_GPIO_Port, A02_CONTROL_Pin, 0);
+//
+//  while(1){
+//	  tickstart = HAL_GetTick();
+//	while(1){
+//		if(HAL_UART_Receive(&huart2, buffer_a02, 1, 300) != HAL_OK){
+//			D(printf("Error in reception of data\n"));
+//			if(trials >= A02YYUW_MAX_MEAS_TRIALS){
+//				return A02YYUW_ERROR_READING_MEASUREMENT;
+//			}
+//			trials += 1;
+//			continue;
+//		}
+//		if(buffer_a02[0] == 0xFF){
+//			HAL_UART_Receive(&huart2, buffer_a02+1, 1, 300);
+//			HAL_UART_Receive(&huart2, buffer_a02+2, 1, 300);
+//			HAL_UART_Receive(&huart2, buffer_a02+3, 1, 300);
+//
+//			if((uint8_t)(buffer_a02[0] + buffer_a02[1] + buffer_a02[2]) == buffer_a02[3]){
+//				distance = (buffer_a02[1] << 8) | buffer_a02[2];
+////				a02yyuw_measurement = distance;
+//  				D(printf("Distance: %d mm\n", distance));
+//				break;
+//			}
+//		}
+//		if(HAL_GetTick() - tickstart > 1000){
+//			HAL_GPIO_WritePin(A02_CONTROL_GPIO_Port, A02_CONTROL_Pin, 1);
+//			return A02YYUW_TIMEOUT;
+//		}
+//	}
+//
+//  }
+
+
+
   general_status ret;
   ret = critical_check();
   if(ret != OK){
