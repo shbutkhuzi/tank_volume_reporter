@@ -80,8 +80,8 @@ void EEPROM_enable(){
 }
 
 void EEPROM_disable(){
-	HAL_GPIO_WritePin(EEPROM_CONTROL_GPIO_Port, EEPROM_CONTROL_Pin, 1);
-	HAL_Delay(10);
+//	HAL_GPIO_WritePin(EEPROM_CONTROL_GPIO_Port, EEPROM_CONTROL_Pin, 1);
+//	HAL_Delay(10);
 }
 
 uint8_t write_bootloder_enable(uint8_t mode, uint8_t auto_en){

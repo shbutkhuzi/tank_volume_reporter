@@ -88,6 +88,8 @@ general_status measurement_error_no;
 
 time_t measError_time = 0;
 
+extern uint8_t subscription_enable;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -231,25 +233,25 @@ int main(void)
 
 
 
-//  general_status rett;
+  general_status rett;
 //
-//  rett = delete_user("995598933675");
-//  printf("delete_user returned: %d\n", rett);
+  rett = delete_user("995598933675");
+  printf("delete_user returned: %d\n", rett);
+
+  rett = delete_user("995598933845");
+  printf("delete_user returned: %d\n", rett);
+
+  rett = delete_user("995598933846");
+  printf("delete_user returned: %d\n", rett);
 //
-//  rett = delete_user("995598933845");
-//  printf("delete_user returned: %d\n", rett);
-//
-//  rett = delete_user("995598933846");
-//  printf("delete_user returned: %d\n", rett);
-//
-//  rett = add_user("+995598933845", "2000(V),180(T)", "12000(V),60(T)");
-//  printf("add_user returned: %d\n", rett);
-//
-//  rett = add_user("+995598933846", "3000(V),180(V),50(T)", "240(T),12000(V),60(T)");
-//  printf("add_user returned: %d\n", rett);
-//
-//  rett = add_user("+995598933675", "5000(V),240(T)", "2031(V)");
-//  printf("add_user returned: %d\n", rett);
+  rett = add_user("+995598933845", "2000(V)", "60(T)");
+  printf("add_user returned: %d\n", rett);
+
+  rett = add_user("+995598933846", "3000(V)", "60(T)");
+  printf("add_user returned: %d\n", rett);
+
+  rett = add_user("+995598933675", "240(T)", "2500(V)");
+  printf("add_user returned: %d\n", rett);
 //
 //  rett = read_user("+995598933845");
 //  printf("read_user returned: %d\n", rett);
@@ -286,8 +288,26 @@ int main(void)
 //
 //  rett = read_user("+995598933846");
 //  printf("read_user returned: %d\n", rett);
-//
-//
+
+  subscription_enable = 1;
+
+  threshold * volume_thresholds = NULL, *time_thresholds = NULL;
+  page_addr * number_addr = NULL;
+
+  rett = init_read_users(&volume_thresholds, &time_thresholds, &number_addr);
+  printf("init_read_users returned :%d\n", rett);
+
+  printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   VOLUME  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+  print_thresholds(volume_thresholds);
+
+  printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   TIME   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+  print_thresholds(time_thresholds);
+
+  printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   ADDRESSES   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+  print_number_page(number_addr);
+
+
+
 //  while(1){}
 
 

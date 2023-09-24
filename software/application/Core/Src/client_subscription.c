@@ -25,7 +25,15 @@ extern char mobile_country_code[5];
  */
 general_status find_user(char * phone, uint16_t * page_number, char * user_data){
 
+	general_status phone_ret;
+	char phone_str[9] = {};
 	uint16_t current_page, page_end, page_start;
+
+	memcpy(phone_str, phone, 8);
+	if(strlen(phone) != 8){
+		phone_ret = phone_number_transformation(phone, phone_str);
+		if(phone_ret != OK) return phone_ret;
+	}
 
 	read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
 
@@ -35,33 +43,213 @@ general_status find_user(char * phone, uint16_t * page_number, char * user_data)
 
 	for(uint16_t i = 0; i < current_page-page_start; i++){
 
-		EEPROM_Read(page_start, 0, (uint8_t *)clients_buffer, (current_page-page_start)*PAGE_SIZE);
+		*page_number = page_start + i;
 
-		if(strncmp(phone_str, clients_buffer+(i*PAGE_SIZE), 8) == 0){
-			ret = SUBSCRIPTION_USER_ALREADY_EXISTS;
-			goto return_from_function;
+		EEPROM_Read(*page_number, 0, (uint8_t *)user_data, PAGE_SIZE);
+
+		if(strncmp(phone_str, user_data, 8) == 0){
+
+			return OK;
 		}
 	}
 
+	return SUBSCRIPTION_USER_DOES_NOT_EXIST;
+}
+
+/*
+ * phone: 8 character long phone number
+ */
+general_status get_user_data(char * phone, uint16_t * page_addr, client * client_data){
+
+	general_status ret, rett;
+	uint16_t page_address;
+	char user_data[33] = {};
+	char phone_str[9] = {};
+
+	memcpy(phone_str, phone, 8);
+	if(strlen(phone) != 8){
+		rett = phone_number_transformation(phone, phone_str);
+		if(rett != OK) return rett;
+	}
+
+	// if page is specified, directly reading from that page
+	if(page_addr != NULL){
+		EEPROM_Read(*page_addr, 0, (uint8_t *)user_data, PAGE_SIZE);
+		if(strncmp(phone_str, user_data, 8) != 0){
+			goto find_user;
+		}else{
+			goto parse_data;
+		}
+	}
+
+	find_user:
+	ret = find_user(phone_str, &page_address, user_data);
+	if(ret != OK) return SUBSCRIPTION_USER_DOES_NOT_EXIST;
+
+
+	parse_data:
+	client_data->page_address = page_address;
+	rett = str_to_client_struct(user_data, client_data);
+	if(rett != OK) return rett;
+
+
+//	memset(client_data->phone_number, 0, 9);
+//	strncpy(client_data->phone_number, phone_str, 8);
+//
+//	memcpy(&en_low_upp_flags, user_data+8, 1);
+//	memcpy(client_data->lowers, user_data+9, 6);
+//	memcpy(client_data->uppers, user_data+15, 6);
+//	memcpy(&client_data->send_count, user_data+21, 2);
+//	memcpy(&client_data->last_reach_time, user_data+23, 8);
+//
+//	for(int8_t j = 5; j >= 3; j--){
+//		if((en_low_upp_flags >> j) & 1){
+//			client_data->lower_types[5-j] = 'T';
+//		}else{
+//			client_data->lower_types[5-j] = 'V';
+//		}
+//	}
+//	for(int8_t j = 2; j >= 0; j--){
+//		if((en_low_upp_flags >> j) & 1){
+//			client_data->upper_types[2-j] = 'T';
+//		}else{
+//			client_data->upper_types[2-j] = 'V';
+//		}
+//	}
+//
+//	client_data->enable = en_low_upp_flags >> 7;
+
+	return OK;
+}
+
+
+general_status parse_limits_data(char * lower_limits, char * upper_limits, client * client_data){
+
+	uint8_t lowers_matched, uppers_matched;
+
+	lowers_matched = sscanf(lower_limits, "%hu(%c),%hu(%c),%hu(%c)", &client_data->lowers[0],
+																	 &client_data->lower_types[0],
+																	 &client_data->lowers[1],
+																	 &client_data->lower_types[1],
+																	 &client_data->lowers[2],
+																	 &client_data->lower_types[2]);
+	uppers_matched = sscanf(upper_limits, "%hu(%c),%hu(%c),%hu(%c)", &client_data->uppers[0],
+																	 &client_data->upper_types[0],
+																	 &client_data->uppers[1],
+																	 &client_data->upper_types[1],
+																	 &client_data->uppers[2],
+																	 &client_data->upper_types[2]);
+
+	if((lowers_matched > 6) || (lowers_matched % 2 != 0)){
+		return SUBSCRIPTION_LOWER_THRESHOLDS_NOT_RECOGNIZED;
+	}
+	if((uppers_matched > 6) || (uppers_matched % 2 != 0)){
+		return SUBSCRIPTION_UPPER_THRESHOLDS_NOT_RECOGNIZED;
+	}
+
+	return OK;
+}
+
+
+general_status client_struct_to_str(const client * client_data, char * return_data){
+
+	uint8_t en_low_upp_flags = 0;
+
+	memset(return_data, 0, PAGE_SIZE);
+
+	// enable bit        for limits: 0 if volume, 1 if time
+	//     EN       _              L L L U U U
+
+	// write lower flags
+	for(uint8_t i = 0; i < 3; i++){
+		if(client_data->lower_types[i] == 'V'){
+			en_low_upp_flags = en_low_upp_flags & 0b11111110;
+		}else if(client_data->lower_types[i] == 'T'){
+			en_low_upp_flags = en_low_upp_flags | 0b00000001;
+		}else if(client_data->lower_types[i] == '\0'){
+
+		}else{
+			return SUBSCRIPTION_LOWER_LIMIT_TYPE_NOT_RECOGNIZED;
+		}
+		en_low_upp_flags = en_low_upp_flags << 1;
+	}
+	// write upper flags
+	for(uint8_t i = 0; i < 3; i++){
+		if(client_data->upper_types[i] == 'V'){
+			en_low_upp_flags = en_low_upp_flags & 0b11111110;
+		}else if(client_data->upper_types[i] == 'T'){
+			en_low_upp_flags = en_low_upp_flags | 0b00000001;
+		}else if(client_data->upper_types[i] == '\0'){
+
+		}else{
+			return SUBSCRIPTION_UPPER_LIMIT_TYPE_NOT_RECOGNIZED;
+		}
+		if(i != 2){
+			en_low_upp_flags = en_low_upp_flags << 1;
+		}
+	}
+
+	if(client_data->enable){
+		en_low_upp_flags = en_low_upp_flags | 0b10000000;
+	}else{
+		en_low_upp_flags = en_low_upp_flags & 0b01111111;
+	}
+
+	strncpy(return_data, client_data->phone_number, 8);
+	return_data[8] = en_low_upp_flags;
+	memcpy(&return_data[9], client_data->lowers, 6);
+	memcpy(&return_data[15], client_data->uppers, 6);
+	memcpy(&return_data[21], &client_data->send_count, 2);
+	memcpy(&return_data[23], &client_data->last_reach_time, 8);
+
+	return OK;
+}
+
+
+general_status str_to_client_struct(const char * user_data, client * client_data){
+
+	uint8_t en_low_upp_flags = 0;
+
+	memset(client_data->phone_number, 0, 9);
+	strncpy(client_data->phone_number, user_data, 8);
+
+	memcpy(&en_low_upp_flags, user_data+8, 1);
+	memcpy(client_data->lowers, user_data+9, 6);
+	memcpy(client_data->uppers, user_data+15, 6);
+	memcpy(&client_data->send_count, user_data+21, 2);
+	memcpy(&client_data->last_reach_time, user_data+23, 8);
+
+	for(int8_t j = 5; j >= 3; j--){
+		if((en_low_upp_flags >> j) & 1){
+			client_data->lower_types[5-j] = 'T';
+		}else{
+			client_data->lower_types[5-j] = 'V';
+		}
+	}
+	for(int8_t j = 2; j >= 0; j--){
+		if((en_low_upp_flags >> j) & 1){
+			client_data->upper_types[2-j] = 'T';
+		}else{
+			client_data->upper_types[2-j] = 'V';
+		}
+	}
+
+	client_data->enable = en_low_upp_flags >> 7;
+
+	return OK;
 }
 
 
 general_status add_user(char * phone, char * lower_limits, char * upper_limits){
 
-	general_status ret, phone_ret;
+	general_status ret, rett;
 	char phone_str[9] = {};
-	uint16_t current_page, page_end, page_start;
-	char *clients_buffer = NULL;
-	char new_user_data[32] = {};
-	uint16_t lowers[3] = {};
-	uint16_t uppers[3] = {};
-	char lower_types[3] = {};
-	char upper_types[3] = {};
-	uint8_t en_low_upp_flags = 0;
-	uint8_t lowers_matched, uppers_matched;
+	uint16_t current_page, page_end, page_start, page_number;
+	char user_data[32] = {};
+	client client_data = {};
 
-	phone_ret = phone_number_transformation(phone, phone_str);
-	if(phone_ret != OK) return phone_ret;
+	rett = phone_number_transformation(phone, phone_str);
+	if(rett != OK) return rett;
 
 	EEPROM_enable();
 	read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
@@ -74,77 +262,25 @@ general_status add_user(char * phone, char * lower_limits, char * upper_limits){
 	}
 
 	// check if user already exists
-	if(current_page - page_start > 0){
-		clients_buffer = (char *)malloc((current_page-page_start) * PAGE_SIZE);
-		if(clients_buffer == NULL){
-			ret = SUBSCRIPTION_MEMORY_ALLOCATION_ERROR;
-			goto return_from_function;
-		}
-		EEPROM_Read(page_start, 0, (uint8_t *)clients_buffer, (current_page-page_start)*PAGE_SIZE);
-	}
-
-	for(uint16_t i = 0; i < current_page-page_start; i++){
-		if(strncmp(phone_str, clients_buffer+(i*PAGE_SIZE), 8) == 0){
-			ret = SUBSCRIPTION_USER_ALREADY_EXISTS;
-			goto return_from_function;
-		}
+	rett = find_user(phone_str, &page_number, user_data);
+	if(rett == OK){
+		ret = SUBSCRIPTION_USER_ALREADY_EXISTS;
+		goto return_from_function;
 	}
 
 	// register new user
-	lowers_matched = sscanf(lower_limits, "%hu(%c),%hu(%c),%hu(%c)", &lowers[0], &lower_types[0], &lowers[1], &lower_types[1], &lowers[2], &lower_types[2]);
-	uppers_matched = sscanf(upper_limits, "%hu(%c),%hu(%c),%hu(%c)", &uppers[0], &upper_types[0], &uppers[1], &upper_types[1], &uppers[2], &upper_types[2]);
-
-	if((lowers_matched > 6) || (lowers_matched % 2 != 0)){
-		ret = SUBSCRIPTION_LOWER_THRESHOLDS_NOT_RECOGNIZED;
-		goto return_from_function;
-	}
-	if((uppers_matched > 6) || (uppers_matched % 2 != 0)){
-		ret = SUBSCRIPTION_UPPER_THRESHOLDS_NOT_RECOGNIZED;
+	rett = parse_limits_data(lower_limits, upper_limits, &client_data);
+	if(rett != OK){
+		ret = rett;
 		goto return_from_function;
 	}
 
-	// enable bit        for limits: 0 if volume, 1 if time
-	//     EN       _              L L L U U U
+	client_data.enable = 1;
+	strncpy(client_data.phone_number, phone_str, 8);
 
-	// write lower flags
-	for(uint8_t i = 0; i < 3; i++){
-		if(lower_types[i] == 'V'){
-			en_low_upp_flags = en_low_upp_flags & 0b11111110;
-		}else if(lower_types[i] == 'T'){
-			en_low_upp_flags = en_low_upp_flags | 0b00000001;
-		}else if(lower_types[i] == '\0'){
+	rett = client_struct_to_str(&client_data, user_data);
 
-		}else{
-			ret = SUBSCRIPTION_LOWER_LIMIT_TYPE_NOT_RECOGNIZED;
-			goto return_from_function;
-		}
-		en_low_upp_flags = en_low_upp_flags << 1;
-	}
-	// write upper flags
-	for(uint8_t i = 0; i < 3; i++){
-		if(upper_types[i] == 'V'){
-			en_low_upp_flags = en_low_upp_flags & 0b11111110;
-		}else if(upper_types[i] == 'T'){
-			en_low_upp_flags = en_low_upp_flags | 0b00000001;
-		}else if(upper_types[i] == '\0'){
-
-		}else{
-			ret = SUBSCRIPTION_UPPER_LIMIT_TYPE_NOT_RECOGNIZED;
-			goto return_from_function;
-		}
-		if(i != 2){
-			en_low_upp_flags = en_low_upp_flags << 1;
-		}
-	}
-	// write enable to 1
-	en_low_upp_flags = en_low_upp_flags | 0b10000000;
-
-	strncpy(new_user_data, phone_str, 8);
-	new_user_data[8] = en_low_upp_flags;
-	memcpy(&new_user_data[9], lowers, 6);
-	memcpy(&new_user_data[15], uppers, 6);
-
-	EEPROM_Write(current_page, 0, (uint8_t *)new_user_data, 32);
+	EEPROM_Write(current_page, 0, (uint8_t *)user_data, 32);
 	current_page += 1;
 	write_current_page(current_page, 0);
 	ret = OK;
@@ -152,7 +288,6 @@ general_status add_user(char * phone, char * lower_limits, char * upper_limits){
 	return_from_function:
 
 	EEPROM_disable();
-	free(clients_buffer);
 	return ret;
 }
 
@@ -195,309 +330,161 @@ general_status phone_number_transformation(const char * phone, char * ret_phone)
 
 general_status delete_user(char * phone){
 
-	general_status ret, phone_ret;
+	general_status ret, rett;
 	char phone_str[9] = {};
-	uint16_t current_page, page_end, page_start;
-	char *clients_buffer = NULL;
+	uint16_t current_page, page_end, page_start, page_number;
 	char empty_or_latest[32] = {};
+	char user_data[32] = {};
 
-	phone_ret = phone_number_transformation(phone, phone_str);
-	if(phone_ret != OK) return phone_ret;
+	rett = phone_number_transformation(phone, phone_str);
+	if(rett != OK) return rett;
 
 
 	EEPROM_enable();
-	read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
 
-	// copy data
-	if(current_page - page_start > 0){
-		clients_buffer = (char *)malloc((current_page-page_start) * PAGE_SIZE);
-		if(clients_buffer == NULL){
-			ret = SUBSCRIPTION_MEMORY_ALLOCATION_ERROR;
-			goto return_from_function;
-		}
-		EEPROM_Read(page_start, 0, (uint8_t *)clients_buffer, (current_page-page_start)*PAGE_SIZE);
-	}else{
-		ret = SUBSCRIPTION_USER_DOES_NOT_EXIST;
+	rett = find_user(phone_str, &page_number, user_data);
+	if(rett != OK){
+		ret = rett;
 		goto return_from_function;
 	}
 
-	for(uint16_t i = 0; i < current_page-page_start; i++){
-		if(strncmp(phone_str, clients_buffer+(i*PAGE_SIZE), 8) == 0){
+	read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
 
-			memset(empty_or_latest, 0, PAGE_SIZE);
-			EEPROM_Write(page_start+i, 0, (uint8_t *)empty_or_latest, PAGE_SIZE);
+	memset(empty_or_latest, 0, PAGE_SIZE);
+	EEPROM_Write(page_number, 0, (uint8_t *)empty_or_latest, PAGE_SIZE);
 
-			if(current_page-page_start > 1){
-				memcpy(empty_or_latest, clients_buffer+((current_page-page_start-1)*PAGE_SIZE), PAGE_SIZE);
-				EEPROM_Write(page_start+i, 0, (uint8_t *)empty_or_latest, PAGE_SIZE);
-				memset(empty_or_latest, 0, PAGE_SIZE);
-				EEPROM_Write(current_page-1, 0, (uint8_t *)empty_or_latest, PAGE_SIZE);
-			}
+	if(current_page-page_start > 1){
+		EEPROM_Read(current_page-1, 0, (uint8_t *)empty_or_latest, PAGE_SIZE);
 
-			current_page -= 1;
-			write_current_page(current_page, 0);
-			ret = OK;
-
-			goto return_from_function;
-		}
+		EEPROM_Write(page_number, 0, (uint8_t *)empty_or_latest, PAGE_SIZE);
+		memset(empty_or_latest, 0, PAGE_SIZE);
+		EEPROM_Write(current_page-1, 0, (uint8_t *)empty_or_latest, PAGE_SIZE);
 	}
 
-	ret = SUBSCRIPTION_USER_DOES_NOT_EXIST;
+	current_page -= 1;
+	write_current_page(current_page, 0);
+	ret = OK;
 
 	return_from_function:
 
 	EEPROM_disable();
-	free(clients_buffer);
 	return ret;
 }
 
 
 general_status read_user(char * phone){
 
-	general_status ret, phone_ret;
-	char phone_str[9] = {};
-	uint16_t current_page, page_end, page_start;
-	char *clients_buffer = NULL;
-	char *user = NULL;
-	uint16_t lowers[3] = {};
-	uint16_t uppers[3] = {};
-	char lower_types[3], upper_types[3];
-	uint8_t en_low_upp_flags;
-	time_t last_reach;
-
-	phone_ret = phone_number_transformation(phone, phone_str);
-	if(phone_ret != OK) return phone_ret;
-
+	general_status ret;
+	client user_data = {};
+	time_t time;
 
 	EEPROM_enable();
-	read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
 
-	if(current_page - page_start > 0){
-		clients_buffer = (char *)malloc((current_page-page_start) * PAGE_SIZE);
-		if(clients_buffer == NULL){
-			ret = SUBSCRIPTION_MEMORY_ALLOCATION_ERROR;
-			goto return_from_function;
-		}
-		EEPROM_Read(page_start, 0, (uint8_t *)clients_buffer, (current_page-page_start)*PAGE_SIZE);
-	}else{
-		ret = SUBSCRIPTION_USER_DOES_NOT_EXIST;
-		goto return_from_function;
+	ret = get_user_data(phone, NULL, &user_data);
+	if(ret != OK) {
+		EEPROM_disable();
+		return ret;
 	}
 
-	for(uint16_t i = 0; i < current_page-page_start; i++){
-		if(strncmp(phone_str, clients_buffer+(i*PAGE_SIZE), 8) == 0){
-
-			user = clients_buffer+(i*PAGE_SIZE);
-			memcpy(phone_str, user, 8); phone_str[8] = 0;
-			memcpy(&en_low_upp_flags, user+8, 1);
-			memcpy(lowers, user+9, 6);
-			memcpy(uppers, user+15, 6);
-			memcpy(&last_reach, user+23, 8);
-
-			for(int8_t j = 5; j >= 3; j--){
-				if((en_low_upp_flags >> j) & 1){
-					lower_types[5-j] = 'T';
-				}else{
-					lower_types[5-j] = 'V';
-				}
-			}
-			for(int8_t j = 2; j >= 0; j--){
-				if((en_low_upp_flags >> j) & 1){
-					upper_types[2-j] = 'T';
-				}else{
-					upper_types[2-j] = 'V';
-				}
-			}
-
-//			D(printf("Plain content:\n"));
-//			for(uint8_t j = 0; j < 32; j++){
-//				D(printf("%d: %x\n", j, *(user+j)));
-//			}
-			D(printf("Page address: %d\n", page_start+i));
-			D(printf("Number:       %s\n", phone_str));
-			D(printf("Enable:       %d\n", en_low_upp_flags >> 7));
-			D(printf("Lower limits: %d(%c),%d(%c),%d(%c)\n", lowers[0], lower_types[0], lowers[1], lower_types[1], lowers[2], lower_types[2]));
-			D(printf("Upper limits: %d(%c),%d(%c),%d(%c)\n", uppers[0], upper_types[0], uppers[1], upper_types[1], uppers[2], upper_types[2]));
-			D(printf("Send   count: %d\n", *(user+21)));
-			D(printf("Latest reach: %s\n", ctime(&last_reach)));
-
-			ret = OK;
-			goto return_from_function;
-		}
-	}
-
-	ret = SUBSCRIPTION_USER_DOES_NOT_EXIST;
-
-	return_from_function:
+	D(printf("Page address: %d\n", user_data.page_address));
+	D(printf("Number:       %s\n", user_data.phone_number));
+	D(printf("Enable:       %d\n", user_data.enable));
+	D(printf("Lower limits: %d(%c),%d(%c),%d(%c)\n", user_data.lowers[0],
+													 user_data.lower_types[0],
+													 user_data.lowers[1],
+													 user_data.lower_types[1],
+													 user_data.lowers[2],
+													 user_data.lower_types[2]));
+	D(printf("Upper limits: %d(%c),%d(%c),%d(%c)\n", user_data.uppers[0],
+													 user_data.upper_types[0],
+													 user_data.uppers[1],
+													 user_data.upper_types[1],
+													 user_data.uppers[2],
+													 user_data.upper_types[2]));
+	D(printf("Send   count: %d\n", user_data.send_count));
+	time = user_data.last_reach_time;
+	D(printf("Latest reach: %s\n", ctime(&time)));
 
 	EEPROM_disable();
-	free(clients_buffer);
-	return ret;
+	return OK;
 }
 
 
 general_status write_user_enable(char * phone, uint8_t enable){
 
-	general_status ret, phone_ret;
+	general_status ret, rett;
 	char phone_str[9] = {};
-	uint16_t current_page, page_end, page_start;
-	char *clients_buffer = NULL;
+	uint16_t page_number;
 	uint8_t user_enable_byte = 0;
 	char user_data[32] = {};
 
-	phone_ret = phone_number_transformation(phone, phone_str);
-	if(phone_ret != OK) return phone_ret;
+	rett = phone_number_transformation(phone, phone_str);
+	if(rett != OK) return rett;
+
 
 	EEPROM_enable();
-	read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
 
-	// copy data
-	if(current_page - page_start > 0){
-		clients_buffer = (char *)malloc((current_page-page_start) * PAGE_SIZE);
-		if(clients_buffer == NULL){
-			ret = SUBSCRIPTION_MEMORY_ALLOCATION_ERROR;
-			goto return_from_function;
-		}
-		EEPROM_Read(page_start, 0, (uint8_t *)clients_buffer, (current_page-page_start)*PAGE_SIZE);
-	}else{
-		ret = SUBSCRIPTION_USER_DOES_NOT_EXIST;
+	rett = find_user(phone_str, &page_number, user_data);
+	if(rett != OK){
+		ret = rett;
 		goto return_from_function;
 	}
 
-	for(uint16_t i = 0; i < current_page-page_start; i++){
-		if(strncmp(phone_str, clients_buffer+(i*PAGE_SIZE), 8) == 0){
-
-			memcpy(user_data, clients_buffer+(i*PAGE_SIZE), PAGE_SIZE);
-			memcpy(&user_enable_byte, user_data+8, 1);
-			if(enable){
-				user_enable_byte = user_enable_byte | 0b10000000;
-			}else{
-				user_enable_byte = user_enable_byte & 0b01111111;
-			}
-
-			memcpy(user_data+8, &user_enable_byte, 1);
-			EEPROM_Write(page_start+i, 0, (uint8_t *)user_data, PAGE_SIZE);
-
-			ret = OK;
-			goto return_from_function;
-		}
+	memcpy(&user_enable_byte, user_data+8, 1);
+	if(enable){
+		user_enable_byte = user_enable_byte | 0b10000000;
+	}else{
+		user_enable_byte = user_enable_byte & 0b01111111;
 	}
 
-	ret = SUBSCRIPTION_USER_DOES_NOT_EXIST;
+	memcpy(user_data+8, &user_enable_byte, 1);
+	EEPROM_Write(page_number, 0, (uint8_t *)user_data, PAGE_SIZE);
+
+	ret = OK;
 
 	return_from_function:
 
 	EEPROM_disable();
-	free(clients_buffer);
 	return ret;
 }
 
 
 general_status update_user(char * phone, char * lower_limits, char * upper_limits){
 
-	general_status ret, phone_ret;
+	general_status ret, rett;
 	char phone_str[9] = {};
-	uint16_t current_page, page_end, page_start;
-	char *clients_buffer = NULL;
 	char user_data[32] = {};
-	uint16_t lowers[3] = {};
-	uint16_t uppers[3] = {};
-	char lower_types[3] = {};
-	char upper_types[3] = {};
-	uint8_t en_low_upp_flags = 0;
-	uint8_t lowers_matched, uppers_matched;
+	client client_data = {};
 
-	phone_ret = phone_number_transformation(phone, phone_str);
-	if(phone_ret != OK) return phone_ret;
+	rett = phone_number_transformation(phone, phone_str);
+	if(rett != OK) return rett;
 
 	EEPROM_enable();
-	read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
 
-	if(current_page - page_start > 0){
-		clients_buffer = (char *)malloc((current_page-page_start) * PAGE_SIZE);
-		if(clients_buffer == NULL){
-			ret = SUBSCRIPTION_MEMORY_ALLOCATION_ERROR;
-			goto return_from_function;
-		}
-		EEPROM_Read(page_start, 0, (uint8_t *)clients_buffer, (current_page-page_start)*PAGE_SIZE);
-	}else{
-		ret = SUBSCRIPTION_USER_DOES_NOT_EXIST;
+	rett = get_user_data(phone_str, NULL, &client_data);
+	if(rett != OK){
+		ret = rett;
 		goto return_from_function;
 	}
 
-	// register new user
-	lowers_matched = sscanf(lower_limits, "%hu(%c),%hu(%c),%hu(%c)", &lowers[0], &lower_types[0], &lowers[1], &lower_types[1], &lowers[2], &lower_types[2]);
-	uppers_matched = sscanf(upper_limits, "%hu(%c),%hu(%c),%hu(%c)", &uppers[0], &upper_types[0], &uppers[1], &upper_types[1], &uppers[2], &upper_types[2]);
-
-	if((lowers_matched > 6) || (lowers_matched % 2 != 0)){
-		ret = SUBSCRIPTION_LOWER_THRESHOLDS_NOT_RECOGNIZED;
-		goto return_from_function;
-	}
-	if((uppers_matched > 6) || (uppers_matched % 2 != 0)){
-		ret = SUBSCRIPTION_UPPER_THRESHOLDS_NOT_RECOGNIZED;
+	rett = parse_limits_data(lower_limits, upper_limits, &client_data);
+	if(rett != OK){
+		ret = rett;
 		goto return_from_function;
 	}
 
-	// enable bit        for limits: 0 if volume, 1 if time
-	//     EN       _              L L L U U U
-
-	// write lower flags
-	for(uint8_t i = 0; i < 3; i++){
-		if(lower_types[i] == 'V'){
-			en_low_upp_flags = en_low_upp_flags & 0b11111110;
-		}else if(lower_types[i] == 'T'){
-			en_low_upp_flags = en_low_upp_flags | 0b00000001;
-		}else if(lower_types[i] == '\0'){
-
-		}else{
-			ret = SUBSCRIPTION_LOWER_LIMIT_TYPE_NOT_RECOGNIZED;
-			goto return_from_function;
-		}
-		en_low_upp_flags = en_low_upp_flags << 1;
-	}
-	// write upper flags
-	for(uint8_t i = 0; i < 3; i++){
-		if(upper_types[i] == 'V'){
-			en_low_upp_flags = en_low_upp_flags & 0b11111110;
-		}else if(upper_types[i] == 'T'){
-			en_low_upp_flags = en_low_upp_flags | 0b00000001;
-		}else if(upper_types[i] == '\0'){
-
-		}else{
-			ret = SUBSCRIPTION_UPPER_LIMIT_TYPE_NOT_RECOGNIZED;
-			goto return_from_function;
-		}
-		if(i != 2){
-			en_low_upp_flags = en_low_upp_flags << 1;
-		}
+	rett = client_struct_to_str(&client_data, user_data);
+	if(rett != OK){
+		ret = rett;
+		goto return_from_function;
 	}
 
-	for(uint16_t i = 0; i < current_page-page_start; i++){
-		if(strncmp(phone_str, clients_buffer+(i*PAGE_SIZE), 8) == 0){
-
-			uint8_t flags;
-
-			memcpy(user_data, clients_buffer+(i*PAGE_SIZE), PAGE_SIZE);
-			memcpy(&flags, user_data + 8, 1);
-			flags = flags & 0b11000000;
-			flags = flags | (en_low_upp_flags & 0b00111111);
-			memcpy(user_data + 8, &flags, 1);
-			memcpy(user_data + 9, lowers, 6);
-			memcpy(user_data + 15, uppers, 6);
-
-			EEPROM_Write(page_start+i, 0, (uint8_t *)user_data, 32);
-
-			ret = OK;
-			goto return_from_function;
-		}
-	}
-
-	ret = SUBSCRIPTION_USER_DOES_NOT_EXIST;
+	EEPROM_Write(client_data.page_address, 0, (uint8_t *)user_data, PAGE_SIZE);
+	ret = OK;
 
 	return_from_function:
 
 	EEPROM_disable();
-	free(clients_buffer);
 	return ret;
 }
 
@@ -766,23 +753,26 @@ threshold * remove_threshold(threshold * head, char type, uint16_t value, char *
 
 void print_thresholds(threshold * head){
 
-    if(head == NULL) printf("Nothing to print\n");
+    if(head == NULL) {
+    	D(printf("Nothing to print\n"));
+    	return;
+    }
 
     threshold * current = head;
 
     do{
-        printf("value:             %d\n", current->value);
-        printf("Type:              %c\n", current->type);
-        printf("Trigger flag:      %d\n", current->trigger_flag);
-        // printf("Pointer:           %d\n", current);
-        // printf("Number pointer:    %d\n", current->num_ptr);
-        if(current->num_ptr == NULL) {printf("                            No numbers for this threshold\n");}
+        D(printf("value:             %d\n", current->value));
+        D(printf("Type:              %c\n", current->type));
+        D(printf("Trigger flag:      %d\n", current->trigger_flag));
+        // D(printf("Pointer:           %d\n", current));
+        // D(printf("Number pointer:    %d\n", current->num_ptr));
+        if(current->num_ptr == NULL) {D(printf("                            No numbers for this threshold\n"));}
         else{
             numbers * current_num = current->num_ptr;
-            printf("                            Numbers:\n");
+            D(printf("                            Numbers:\n"));
             do{
 
-                printf("                                %s\n", current_num->number);
+                D(printf("                                %s\n", current_num->number));
                 current_num = current_num->next_ptr;
             } while (current_num != NULL);
 
@@ -793,79 +783,174 @@ void print_thresholds(threshold * head){
 }
 
 
-general_status init_read_users(threshold * volume_thresholds, threshold * time_thresholds){
+page_addr * find_number_page(page_addr * head, const char * number){
+
+    if(head == NULL) return NULL;
+
+    page_addr * this = head;
+
+    while (this != NULL){
+        if(strncmp(this->number, number, 8) == 0){
+            return this;
+        }
+        this = this->next_ptr;
+    }
+
+    return NULL;
+}
+
+
+page_addr * add_number_page(page_addr * head, const char * number, const uint16_t address){
+
+    // if not initialized, initialize
+    if(head == NULL) {
+        head = (page_addr *)malloc(sizeof(page_addr));
+        if(head == NULL) return NULL;
+
+        head->address = address;
+        memset(head->number, 0, 9);
+        strncpy(head->number, number, 8);
+        head->next_ptr = NULL;
+
+        return head;
+    }
+
+    // if exists, update
+    page_addr * temp = NULL;
+    temp = find_number_page(head, number);
+    if(temp != NULL){
+        temp->address = address;
+        return head;
+    }
+
+    // if not exists, add at the end
+    temp = head;
+    while(temp->next_ptr != NULL){
+        temp = temp->next_ptr;
+    }
+
+    page_addr * new_record = NULL;
+    new_record = (page_addr *)malloc(sizeof(page_addr));
+    if(new_record == NULL) return NULL;
+
+    temp->next_ptr = new_record;
+    memset(new_record->number, 0, 9);
+    strncpy(new_record->number, number, 8);
+    new_record->address = address;
+    new_record->next_ptr = NULL;
+
+    return head;
+}
+
+
+page_addr * delete_number_page(page_addr * head, char * number){
+
+    if(head == NULL) return NULL;
+
+    page_addr * this = head;
+    page_addr * prev = NULL;
+
+    while (this != NULL){
+        if(strncmp(this->number, number, 8) == 0){
+            if(prev == NULL && this->next_ptr == NULL){
+                free(this);
+                head = NULL;
+            }else if(prev != NULL && this->next_ptr == NULL){
+                free(this);
+                prev->next_ptr = NULL;
+            }else if(prev == NULL && this->next_ptr != NULL){
+                head = this->next_ptr;
+                free(this);
+            }else if(prev != NULL && this->next_ptr != NULL){
+                prev->next_ptr = this->next_ptr;
+                free(this);
+            }
+
+            break;
+        }
+
+        prev = this;
+        this = this->next_ptr;
+    }
+
+    return head;
+}
+
+
+void print_number_page(page_addr * head){
+
+    if(head == NULL){
+    	D(printf("Nothing to print\n"));
+    	return;
+    }
+
+    page_addr * this = head;
+    while(this != NULL){
+
+        D(printf("Number:     %s   Page: %4hu\n", this->number, this->address));
+
+        this = this->next_ptr;
+    }
+}
+
+
+general_status init_read_users(threshold ** volume_thresholds, threshold ** time_thresholds, page_addr ** number_addr){
+
+	general_status ret, rett;
+	uint16_t current_page, page_end, page_start, page_number;
+	char user_data[PAGE_SIZE];
+	client client_data;
 
 	if(subscription_enable != 1){
 		return SUBSCRIPTION_NOT_ENABLED;
 	}
 
-	uint16_t current_page, page_end, page_start;
-	general_status ret;
-	char *clients_buffer = NULL;
-	char *user = NULL;
-
 	EEPROM_enable();
-	read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
 
-	if(current_page - page_start > 0){
-		clients_buffer = (char *)malloc((current_page-page_start) * PAGE_SIZE);
-		if(clients_buffer == NULL){
-			ret = SUBSCRIPTION_MEMORY_ALLOCATION_ERROR;
-			goto return_from_function;
-		}
-		EEPROM_Read(page_start, 0, (uint8_t *)clients_buffer, (current_page-page_start)*PAGE_SIZE);
-	}else{
-		ret = SUBSCRIPTION_NO_USER_REGISTERED;;
+	read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
+	if(page_start == current_page){
+		ret = SUBSCRIPTION_NO_USER_REGISTERED;
 		goto return_from_function;
 	}
 
 
 	for(uint16_t i = 0; i < current_page-page_start; i++){
 
-		user = clients_buffer+(i*PAGE_SIZE);
-		memcpy(phone_str, user, 8); phone_str[8] = 0;
-		memcpy(&en_low_upp_flags, user+8, 1);
-		memcpy(lowers, user+9, 6);
-		memcpy(uppers, user+15, 6);
-		memcpy(&last_reach, user+23, 8);
+		page_number = page_start + i;
 
-		for(int8_t j = 5; j >= 3; j--){
-			if((en_low_upp_flags >> j) & 1){
-				lower_types[5-j] = 'T';
-			}else{
-				lower_types[5-j] = 'V';
-			}
-		}
-		for(int8_t j = 2; j >= 0; j--){
-			if((en_low_upp_flags >> j) & 1){
-				upper_types[2-j] = 'T';
-			}else{
-				upper_types[2-j] = 'V';
-			}
+		EEPROM_Read(page_number, 0, (uint8_t *)user_data, PAGE_SIZE);
+
+		rett = str_to_client_struct(user_data, &client_data);
+		if(rett != OK){
+			ret = rett;
+			goto return_from_function;
 		}
 
-//			D(printf("Plain content:\n"));
-//			for(uint8_t j = 0; j < 32; j++){
-//				D(printf("%d: %x\n", j, *(user+j)));
-//			}
-		D(printf("Page address: %d\n", page_start+i));
-		D(printf("Number:       %s\n", phone_str));
-		D(printf("Enable:       %d\n", en_low_upp_flags >> 7));
-		D(printf("Lower limits: %d(%c),%d(%c),%d(%c)\n", lowers[0], lower_types[0], lowers[1], lower_types[1], lowers[2], lower_types[2]));
-		D(printf("Upper limits: %d(%c),%d(%c),%d(%c)\n", uppers[0], upper_types[0], uppers[1], upper_types[1], uppers[2], upper_types[2]));
-		D(printf("Send   count: %d\n", *(user+21)));
-		D(printf("Latest reach: %s\n", ctime(&last_reach)));
+		*number_addr = add_number_page(*number_addr, client_data.phone_number, page_number);
 
-		ret = OK;
-		goto return_from_function;
+		for(uint8_t i = 0; i < 3; i++){
+			if(client_data.lowers[i] != 0){
+				if(client_data.lower_types[i] == 'V'){
+					*volume_thresholds = add_threshold(*volume_thresholds, 'L', client_data.lowers[i], client_data.phone_number);
+				}else if(client_data.lower_types[i] == 'T'){
+					*time_thresholds = add_threshold(*time_thresholds, 'L', client_data.lowers[i], client_data.phone_number);
+				}
+			}
+			if(client_data.uppers[i] != 0){
+				if(client_data.upper_types[i] == 'V'){
+					*volume_thresholds = add_threshold(*volume_thresholds, 'U', client_data.uppers[i], client_data.phone_number);
+				}else if(client_data.upper_types[i] == 'T'){
+					*time_thresholds = add_threshold(*time_thresholds, 'U', client_data.uppers[i], client_data.phone_number);
+				}
+			}
+		}
 	}
 
-
+	ret = OK;
 
 	return_from_function:
 	EEPROM_disable();
-	free(clients_buffer);
-
+	return ret;
 }
 
 
