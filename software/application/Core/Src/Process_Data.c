@@ -17,6 +17,7 @@
 #include "predict.h"
 #include "time_my.h"
 #include "rtc.h"
+#include "client_subscription.h"
 
 
 extern char admins[MAX_ADMINS][14];
@@ -52,6 +53,8 @@ extern uint8_t ds18b20_precense_flag;
 
 extern uint8_t standby_mode_enable;
 extern uint8_t subscription_enable;
+
+extern data_addr data;
 
 extern struct standby_alarm wakeup_time;
 extern struct standby_alarm standby_time;
@@ -666,6 +669,93 @@ general_status process_admin_cmd(char* admin, char* cmd){
 		if(!SIM800L_SMS(admin, sendStr, 1)){
 			return SIM800_ERROR_SENDING_SMS;
 		}
+	}else if((strncmp(cmd, "cmd:update_user:", 16) == 0)){
+
+		char limits[2][50] = {};
+		char uppers[50] = {}, lowers[50] = {};
+		char number[20] = {};
+		uint8_t matched_items = 0;
+		char sendStr[500];
+		general_status ret;
+		client client_data = {};
+		uint16_t page_addr;
+
+		matched_items = sscanf(cmd, "cmd:update_user:%[^;];%[^;];%[^;];", number, limits[0], limits[1]);
+
+		if((matched_items < 2) || (strlen(number) == 0)){
+			goto report_parse_error;
+		}
+
+		if((strncmp(limits[0], "U:", 2) == 0) &&
+		   (strncmp(limits[1], "L:", 2) == 0)){
+			strcpy(uppers, limits[0]);
+			strcpy(lowers, limits[1]);
+		}else if((strncmp(limits[1], "U:", 2) == 0) &&
+				 (strncmp(limits[0], "L:", 2) == 0)){
+			strcpy(uppers, limits[1]);
+			strcpy(lowers, limits[0]);
+		}else{
+			goto report_parse_error;
+		}
+
+		goto update_user;
+
+		report_parse_error:
+		sprintf(sendStr, "Error while parsing input data\nNumber: %s\nlimits[0]: %s\nlimits[1]: %s", number, limits[0], limits[1]);
+		if(!SIM800L_SMS(admin, sendStr, 1)){
+			return SIM800_ERROR_SENDING_SMS;
+		}
+		goto end;
+
+		update_user:
+
+		ret = update_user(number, lowers, uppers);
+		if(ret != OK){
+			sprintf(sendStr, "Error updating user\nError no: %d", ret);
+			if(!SIM800L_SMS(admin, sendStr, 1)){
+				return SIM800_ERROR_SENDING_SMS;
+			}
+			goto end;
+		}
+
+		ret = get_user_data(number, &page_addr, &client_data);
+		if(ret != OK){
+			sprintf(sendStr, "Error while reading user\nError no: %d", ret);
+			if(!SIM800L_SMS(admin, sendStr, 1)){
+				return SIM800_ERROR_SENDING_SMS;
+			}
+			goto end;
+		}
+
+		// if client data is updated, update it in RAM also first by removing old data
+		if(find_number_page(data.number_addr, number) != NULL){
+			ret = remove_client_data_from_RAM(&client_data, &data);
+
+			if(ret != OK){
+				sprintf(sendStr, "Error while removing user from RAM\nError no: %d", ret);
+				if(!SIM800L_SMS(admin, sendStr, 1)){
+					return SIM800_ERROR_SENDING_SMS;
+				}
+				goto end;
+			}
+		}
+
+		ret = move_client_data_to_RAM(&client_data, &data);
+		if(ret != OK){
+			sprintf(sendStr, "Error while updating user data in RAM\nError no: %d", ret);
+			if(!SIM800L_SMS(admin, sendStr, 1)){
+				return SIM800_ERROR_SENDING_SMS;
+			}
+			goto end;
+		}
+
+		user_data_print_repr(&client_data, sendStr);
+		if(!SIM800L_SMS(admin, sendStr, 1)){
+			return SIM800_ERROR_SENDING_SMS;
+		}
+
+		end:;
+
 	}else if((strncmp(cmd, "cmd:SIM800L_SMS:", 16) == 0)){
 		char number[20] = {};
 		char message[1024] = {};

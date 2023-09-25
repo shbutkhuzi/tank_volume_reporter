@@ -12,6 +12,7 @@
 #include "EEPROM.h"
 #include "stdlib.h"
 
+data_addr data = {};
 
 uint8_t subscription_enable = 0;
 extern char mobile_country_code[5];
@@ -240,6 +241,9 @@ general_status str_to_client_struct(const char * user_data, client * client_data
 }
 
 
+/*
+ * !!!! depreciated, instead use update_user
+ */
 general_status add_user(char * phone, char * lower_limits, char * upper_limits){
 
 	general_status ret, rett;
@@ -376,7 +380,7 @@ general_status read_user(char * phone){
 
 	general_status ret;
 	client user_data = {};
-	time_t time;
+	char bufr[500] = {};
 
 	EEPROM_enable();
 
@@ -386,26 +390,38 @@ general_status read_user(char * phone){
 		return ret;
 	}
 
-	D(printf("Page address: %d\n", user_data.page_address));
-	D(printf("Number:       %s\n", user_data.phone_number));
-	D(printf("Enable:       %d\n", user_data.enable));
-	D(printf("Lower limits: %d(%c),%d(%c),%d(%c)\n", user_data.lowers[0],
-													 user_data.lower_types[0],
-													 user_data.lowers[1],
-													 user_data.lower_types[1],
-													 user_data.lowers[2],
-													 user_data.lower_types[2]));
-	D(printf("Upper limits: %d(%c),%d(%c),%d(%c)\n", user_data.uppers[0],
-													 user_data.upper_types[0],
-													 user_data.uppers[1],
-													 user_data.upper_types[1],
-													 user_data.uppers[2],
-													 user_data.upper_types[2]));
-	D(printf("Send   count: %d\n", user_data.send_count));
-	time = user_data.last_reach_time;
-	D(printf("Latest reach: %s\n", ctime(&time)));
+	user_data_print_repr(&user_data, bufr);
+	D(printf(bufr));
 
 	EEPROM_disable();
+	return OK;
+}
+
+
+general_status user_data_print_repr(client * user_data, char * return_str){
+
+	time_t time;
+
+	*return_str = 0;
+	sprintf(return_str + strlen(return_str), "Page address: %d\n", user_data->page_address);
+	sprintf(return_str + strlen(return_str), "Number:       %s\n", user_data->phone_number);
+	sprintf(return_str + strlen(return_str), "Enable:       %d\n", user_data->enable);
+	sprintf(return_str + strlen(return_str), "Lower limits: %d(%c),%d(%c),%d(%c)\n", user_data->lowers[0],
+																					 user_data->lower_types[0],
+																					 user_data->lowers[1],
+																					 user_data->lower_types[1],
+																					 user_data->lowers[2],
+																					 user_data->lower_types[2]);
+	sprintf(return_str + strlen(return_str), "Upper limits: %d(%c),%d(%c),%d(%c)\n", user_data->uppers[0],
+																					 user_data->upper_types[0],
+																					 user_data->uppers[1],
+																					 user_data->upper_types[1],
+																					 user_data->uppers[2],
+																					 user_data->upper_types[2]);
+	sprintf(return_str + strlen(return_str), "Send   count: %d\n", user_data->send_count);
+	time = user_data->last_reach_time;
+	sprintf(return_str + strlen(return_str), "Latest reach: %s", ctime(&time));
+
 	return OK;
 }
 
@@ -449,12 +465,18 @@ general_status write_user_enable(char * phone, uint8_t enable){
 }
 
 
+/*
+ * updates limits info if user exists
+ * adds new user if it does not exist
+ */
 general_status update_user(char * phone, char * lower_limits, char * upper_limits){
 
 	general_status ret, rett;
 	char phone_str[9] = {};
 	char user_data[32] = {};
 	client client_data = {};
+	uint16_t current_page, page_end, page_start;
+	uint8_t adding_new_user_flag = 0;
 
 	rett = phone_number_transformation(phone, phone_str);
 	if(rett != OK) return rett;
@@ -462,7 +484,17 @@ general_status update_user(char * phone, char * lower_limits, char * upper_limit
 	EEPROM_enable();
 
 	rett = get_user_data(phone_str, NULL, &client_data);
-	if(rett != OK){
+	if(rett == SUBSCRIPTION_USER_DOES_NOT_EXIST){
+		adding_new_user_flag = 1;
+		read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
+
+		// check if space is available
+		if(current_page > page_end){
+			ret = SUBSCRIPTION_NO_MORE_SPACE_TO_ADD_NEW_USER;
+			goto return_from_function;
+		}
+	}
+	else if(rett != OK){
 		ret = rett;
 		goto return_from_function;
 	}
@@ -473,9 +505,22 @@ general_status update_user(char * phone, char * lower_limits, char * upper_limit
 		goto return_from_function;
 	}
 
+	if(adding_new_user_flag){
+		client_data.enable = 1;
+		strncpy(client_data.phone_number, phone_str, 8);
+	}
+
 	rett = client_struct_to_str(&client_data, user_data);
 	if(rett != OK){
 		ret = rett;
+		goto return_from_function;
+	}
+
+	if(adding_new_user_flag){
+		EEPROM_Write(current_page, 0, (uint8_t *)user_data, PAGE_SIZE);
+		current_page += 1;
+		write_current_page(current_page, 0);
+		ret = OK;
 		goto return_from_function;
 	}
 
@@ -894,12 +939,12 @@ void print_number_page(page_addr * head){
 }
 
 
-general_status init_read_users(threshold ** volume_thresholds, threshold ** time_thresholds, page_addr ** number_addr){
+general_status init_read_users(data_addr * data){
 
 	general_status ret, rett;
 	uint16_t current_page, page_end, page_start, page_number;
 	char user_data[PAGE_SIZE];
-	client client_data;
+	client client_data = {};
 
 	if(subscription_enable != 1){
 		return SUBSCRIPTION_NOT_ENABLED;
@@ -926,24 +971,32 @@ general_status init_read_users(threshold ** volume_thresholds, threshold ** time
 			goto return_from_function;
 		}
 
-		*number_addr = add_number_page(*number_addr, client_data.phone_number, page_number);
+		client_data.page_address = page_number;
 
-		for(uint8_t i = 0; i < 3; i++){
-			if(client_data.lowers[i] != 0){
-				if(client_data.lower_types[i] == 'V'){
-					*volume_thresholds = add_threshold(*volume_thresholds, 'L', client_data.lowers[i], client_data.phone_number);
-				}else if(client_data.lower_types[i] == 'T'){
-					*time_thresholds = add_threshold(*time_thresholds, 'L', client_data.lowers[i], client_data.phone_number);
-				}
-			}
-			if(client_data.uppers[i] != 0){
-				if(client_data.upper_types[i] == 'V'){
-					*volume_thresholds = add_threshold(*volume_thresholds, 'U', client_data.uppers[i], client_data.phone_number);
-				}else if(client_data.upper_types[i] == 'T'){
-					*time_thresholds = add_threshold(*time_thresholds, 'U', client_data.uppers[i], client_data.phone_number);
-				}
-			}
+		rett = move_client_data_to_RAM(&client_data, data);
+		if(rett != OK){
+			ret = rett;
+			goto return_from_function;
 		}
+
+//		*number_addr = add_number_page(*number_addr, client_data.phone_number, page_number);
+//
+//		for(uint8_t i = 0; i < 3; i++){
+//			if(client_data.lowers[i] != 0){
+//				if(client_data.lower_types[i] == 'V'){
+//					*volume_thresholds = add_threshold(*volume_thresholds, 'L', client_data.lowers[i], client_data.phone_number);
+//				}else if(client_data.lower_types[i] == 'T'){
+//					*time_thresholds = add_threshold(*time_thresholds, 'L', client_data.lowers[i], client_data.phone_number);
+//				}
+//			}
+//			if(client_data.uppers[i] != 0){
+//				if(client_data.upper_types[i] == 'V'){
+//					*volume_thresholds = add_threshold(*volume_thresholds, 'U', client_data.uppers[i], client_data.phone_number);
+//				}else if(client_data.upper_types[i] == 'T'){
+//					*time_thresholds = add_threshold(*time_thresholds, 'U', client_data.uppers[i], client_data.phone_number);
+//				}
+//			}
+//		}
 	}
 
 	ret = OK;
@@ -954,4 +1007,36 @@ general_status init_read_users(threshold ** volume_thresholds, threshold ** time
 }
 
 
+general_status move_client_data_to_RAM(client * client_data, data_addr * data){
 
+	data->number_addr = add_number_page(data->number_addr, client_data->phone_number, client_data->page_address);
+
+	for(uint8_t i = 0; i < 3; i++){
+		if(client_data->lowers[i] != 0){
+			if(client_data->lower_types[i] == 'V'){
+				data->volume_thresholds = add_threshold(data->volume_thresholds, 'L', client_data->lowers[i], client_data->phone_number);
+			}else if(client_data->lower_types[i] == 'T'){
+				data->time_thresholds = add_threshold(data->time_thresholds, 'L', client_data->lowers[i], client_data->phone_number);
+			}
+		}
+		if(client_data->uppers[i] != 0){
+			if(client_data->upper_types[i] == 'V'){
+				data->volume_thresholds = add_threshold(data->volume_thresholds, 'U', client_data->uppers[i], client_data->phone_number);
+			}else if(client_data->upper_types[i] == 'T'){
+				data->time_thresholds = add_threshold(data->time_thresholds, 'U', client_data->uppers[i], client_data->phone_number);
+			}
+		}
+	}
+
+	return OK;
+}
+
+
+general_status remove_client_data_from_RAM(client * client_data, data_addr * data){
+
+	data->number_addr = delete_number_page(data->number_addr, client_data->phone_number);
+	data->volume_thresholds = remove_threshold(data->volume_thresholds, 0, 0, client_data->phone_number);
+	data->time_thresholds = remove_threshold(data->time_thresholds, 0, 0, client_data->phone_number);
+
+	return OK;
+}

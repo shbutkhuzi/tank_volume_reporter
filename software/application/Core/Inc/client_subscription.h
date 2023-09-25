@@ -45,6 +45,13 @@ typedef struct __attribute__((packed)) page_addr_struct{
 } page_addr;
 
 
+typedef struct __attribute__((packed)) data_addr_struct{
+	threshold * volume_thresholds;
+	threshold * time_thresholds;
+	page_addr * number_addr;
+} data_addr;
+
+
 
 general_status find_user(char * phone, uint16_t * page_number, char * user_data);
 general_status get_user_data(char * phone, uint16_t * page_addr, client * client_data);
@@ -55,9 +62,11 @@ general_status add_user(char * phone, char * lower_limits, char * upper_limits);
 general_status phone_number_transformation(const char * phone, char * ret_phone);
 general_status delete_user(char * phone);
 general_status read_user(char * phone);
+general_status user_data_print_repr(client * user_data, char * return_str);
 general_status write_user_enable(char * phone, uint8_t enable);
 general_status update_user(char * phone, char * lower_limits, char * upper_limits);
-general_status init_read_users(threshold ** volume_thresholds, threshold ** time_thresholds, page_addr ** number_addr);
+general_status init_read_users(data_addr * data);
+
 
 threshold * find_threshold(threshold * head, char type, uint16_t value);
 numbers * find_number(numbers * head, char * number);
@@ -69,6 +78,7 @@ page_addr * find_number_page(page_addr * head, const char * number);
 page_addr * add_number_page(page_addr * head, const char * number, const uint16_t address);
 page_addr * delete_number_page(page_addr * head, char * number);
 void print_number_page(page_addr * head);
-
+general_status move_client_data_to_RAM(client * client_data, data_addr * data);
+general_status remove_client_data_from_RAM(client * client_data, data_addr * data);
 
 #endif /* INC_CLIENT_SUBSCRIPTION_H_ */
