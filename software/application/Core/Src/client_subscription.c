@@ -141,10 +141,10 @@ general_status parse_limits_data(char * lower_limits, char * upper_limits, clien
 																	 &client_data->uppers[2],
 																	 &client_data->upper_types[2]);
 
-	if((lowers_matched > 6) || (lowers_matched % 2 != 0)){
+	if((lowers_matched == 0) || (lowers_matched > 6) || (lowers_matched % 2 != 0)){
 		return SUBSCRIPTION_LOWER_THRESHOLDS_NOT_RECOGNIZED;
 	}
-	if((uppers_matched > 6) || (uppers_matched % 2 != 0)){
+	if((lowers_matched == 0) || (uppers_matched > 6) || (uppers_matched % 2 != 0)){
 		return SUBSCRIPTION_UPPER_THRESHOLDS_NOT_RECOGNIZED;
 	}
 

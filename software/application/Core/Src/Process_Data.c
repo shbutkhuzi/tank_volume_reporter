@@ -679,6 +679,7 @@ general_status process_admin_cmd(char* admin, char* cmd){
 		general_status ret;
 		client client_data = {};
 		uint16_t page_addr;
+		char phone_str[9] = {};
 
 		matched_items = sscanf(cmd, "cmd:update_user:%[^;];%[^;];%[^;];", number, limits[0], limits[1]);
 
@@ -686,14 +687,17 @@ general_status process_admin_cmd(char* admin, char* cmd){
 			goto report_parse_error;
 		}
 
+		ret = phone_number_transformation(number, phone_str);
+		if(ret != OK) goto report_parse_error;
+
 		if((strncmp(limits[0], "U:", 2) == 0) &&
 		   (strncmp(limits[1], "L:", 2) == 0)){
 			strcpy(uppers, limits[0]);
 			strcpy(lowers, limits[1]);
 		}else if((strncmp(limits[1], "U:", 2) == 0) &&
 				 (strncmp(limits[0], "L:", 2) == 0)){
-			strcpy(uppers, limits[1]);
-			strcpy(lowers, limits[0]);
+			strcpy(uppers, limits[1]+2);
+			strcpy(lowers, limits[0]+2);
 		}else{
 			goto report_parse_error;
 		}
@@ -709,7 +713,7 @@ general_status process_admin_cmd(char* admin, char* cmd){
 
 		update_user:
 
-		ret = update_user(number, lowers, uppers);
+		ret = update_user(phone_str, lowers, uppers);
 		if(ret != OK){
 			sprintf(sendStr, "Error updating user\nError no: %d", ret);
 			if(!SIM800L_SMS(admin, sendStr, 1)){
@@ -718,7 +722,7 @@ general_status process_admin_cmd(char* admin, char* cmd){
 			goto end;
 		}
 
-		ret = get_user_data(number, &page_addr, &client_data);
+		ret = get_user_data(phone_str, &page_addr, &client_data);
 		if(ret != OK){
 			sprintf(sendStr, "Error while reading user\nError no: %d", ret);
 			if(!SIM800L_SMS(admin, sendStr, 1)){
@@ -728,7 +732,7 @@ general_status process_admin_cmd(char* admin, char* cmd){
 		}
 
 		// if client data is updated, update it in RAM also first by removing old data
-		if(find_number_page(data.number_addr, number) != NULL){
+		if(find_number_page(data.number_addr, phone_str) != NULL){
 			ret = remove_client_data_from_RAM(&client_data, &data);
 
 			if(ret != OK){
@@ -754,7 +758,48 @@ general_status process_admin_cmd(char* admin, char* cmd){
 			return SIM800_ERROR_SENDING_SMS;
 		}
 
+		printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   VOLUME  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+		print_thresholds(data.volume_thresholds);
+
+		printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   TIME   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+		print_thresholds(data.time_thresholds);
+
+		printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   ADDRESSES   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+		print_number_page(data.number_addr);
+
 		end:;
+
+	}else if((strncmp(cmd, "cmd:delete_user:", 16) == 0)){
+
+//		char number[20] = {};
+//		uint8_t matched_items = 0;
+//		char phone_str[9] = {};
+//
+//		matched_items = sscanf(cmd, "cmd:delete_user:%d", number);
+//
+//		if(matched_items != 1){
+//			goto report_parse_error;
+//		}
+//
+//		ret = phone_number_transformation(number, phone_str);
+//		if(ret != OK) goto report_parse_error;
+//
+//		goto delete_user;
+//
+//		report_parse_error:
+//		sprintf(sendStr, "Error while parsing number\nNumber: %s", number);
+//		if(!SIM800L_SMS(admin, sendStr, 1)){
+//			return SIM800_ERROR_SENDING_SMS;
+//		}
+//		goto end;
+//
+//
+//		delete_user:
+//
+//
+//
+//
+//		end:;
 
 	}else if((strncmp(cmd, "cmd:SIM800L_SMS:", 16) == 0)){
 		char number[20] = {};
