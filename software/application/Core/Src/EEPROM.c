@@ -163,8 +163,9 @@ void EEPROM_Read (uint16_t page, uint16_t offset, uint8_t *data, uint16_t size)
 	uint16_t numofpages = (endPage-startPage) + 1;
 	uint16_t pos=0;
 
-    uint8_t *pdata;
-    pdata = (uint8_t *)malloc(sizeof(uint8_t)*PAGE_SIZE);
+	char pdata[PAGE_SIZE];
+//    uint8_t *pdata;
+//    pdata = (uint8_t *)malloc(sizeof(uint8_t)*PAGE_SIZE);
 
 	for (int i=0; i<numofpages; i++)
 	{
@@ -172,7 +173,7 @@ void EEPROM_Read (uint16_t page, uint16_t offset, uint8_t *data, uint16_t size)
 		//uint16_t MemAddress = startPage<<paddrposition | offset;
 		uint16_t bytesremaining = bytestowrite(size, offset);
 
-		HAL_I2C_Mem_Read(EEPROM_I2C, EEPROM_ADDR, startPage * PAGE_SIZE, 2, pdata, PAGE_SIZE, 1000);
+		HAL_I2C_Mem_Read(EEPROM_I2C, EEPROM_ADDR, startPage * PAGE_SIZE, 2, (uint8_t *)pdata, PAGE_SIZE, 1000);
 		while(HAL_I2C_IsDeviceReady(EEPROM_I2C, EEPROM_ADDR, 100, 1000) != HAL_OK); // !!!!!should be edited HAL_MAX_DELAY
 
 		memcpy(data+pos, pdata+offset, bytesremaining);
@@ -183,7 +184,7 @@ void EEPROM_Read (uint16_t page, uint16_t offset, uint8_t *data, uint16_t size)
 		pos += bytesremaining;
 	}
 
-	free(pdata);
+//	free(pdata);
 
 //	for (int i=0; i<numofpages; i++)
 //	{

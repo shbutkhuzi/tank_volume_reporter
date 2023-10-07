@@ -117,7 +117,7 @@ void check_requests(){
 			ret = Download_New_Firmware();
 			if(ret == OK){
 				char sendStr[100];
-				sprintf(sendStr, "Firmware download success, now starting boorloader");
+				sprintf(sendStr, "Firmware download success, now starting bootloader");
 				SIM800L_SMS(admins[0], sendStr, 1);
 				D(printf("Start bootloading...\n"));
 				write_bootloder_enable(1, 1);
@@ -673,12 +673,11 @@ general_status process_admin_cmd(char* admin, char* cmd){
 
 		char limits[2][50] = {};
 		char uppers[50] = {}, lowers[50] = {};
-		char number[20] = {};
+		char number[15] = {};
 		uint8_t matched_items = 0;
-		char sendStr[500];
+		char sendStr[250] = {};
 		general_status ret;
 		client client_data = {};
-		uint16_t page_addr;
 		char phone_str[9] = {};
 
 		matched_items = sscanf(cmd, "cmd:update_user:%[^;];%[^;];%[^;];", number, limits[0], limits[1]);
@@ -722,7 +721,7 @@ general_status process_admin_cmd(char* admin, char* cmd){
 			goto end;
 		}
 
-		ret = get_user_data(phone_str, &page_addr, &client_data);
+		ret = get_user_data(phone_str, NULL, &client_data);
 		if(ret != OK){
 			sprintf(sendStr, "Error while reading user\nError no: %d", ret);
 			if(!SIM800L_SMS(admin, sendStr, 1)){
@@ -758,48 +757,110 @@ general_status process_admin_cmd(char* admin, char* cmd){
 			return SIM800_ERROR_SENDING_SMS;
 		}
 
-		printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   VOLUME  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+		D(printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   VOLUME  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"));
 		print_thresholds(data.volume_thresholds);
 
-		printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   TIME   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+		D(printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   TIME   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"));
 		print_thresholds(data.time_thresholds);
 
-		printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   ADDRESSES   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+		D(printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   ADDRESSES   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"));
 		print_number_page(data.number_addr);
 
 		end:;
 
 	}else if((strncmp(cmd, "cmd:delete_user:", 16) == 0)){
 
-//		char number[20] = {};
-//		uint8_t matched_items = 0;
-//		char phone_str[9] = {};
-//
-//		matched_items = sscanf(cmd, "cmd:delete_user:%d", number);
-//
-//		if(matched_items != 1){
-//			goto report_parse_error;
-//		}
-//
-//		ret = phone_number_transformation(number, phone_str);
-//		if(ret != OK) goto report_parse_error;
-//
-//		goto delete_user;
-//
-//		report_parse_error:
-//		sprintf(sendStr, "Error while parsing number\nNumber: %s", number);
-//		if(!SIM800L_SMS(admin, sendStr, 1)){
-//			return SIM800_ERROR_SENDING_SMS;
-//		}
-//		goto end;
-//
-//
-//		delete_user:
-//
-//
-//
-//
-//		end:;
+		general_status ret = 0;
+		char number[20] = {};
+		uint8_t matched_items = 0;
+		char phone_str[9] = {};
+		uint16_t current_page, page_end, page_start;
+		client last_client_data = {}, cli_data = {};
+		char sendStr[500];
+
+		matched_items = sscanf(cmd, "cmd:delete_user:%[^\r\n]", number);
+
+		if(matched_items != 1){
+			goto report_parse_error_2;
+		}
+
+		ret = phone_number_transformation(number, phone_str);
+		if(ret != OK) goto report_parse_error_2;
+
+		goto delete_user;
+
+		report_parse_error_2:
+		sprintf(sendStr, "Error while parsing number\nNumber: %s\nError code: %d", number, ret);
+		if(!SIM800L_SMS(admin, sendStr, 1)){
+			return SIM800_ERROR_SENDING_SMS;
+		}
+		goto end_2;
+
+
+		delete_user:
+
+		ret = get_user_data(phone_str, NULL, &cli_data);
+		if(ret != OK){
+			sprintf(sendStr, "Error while retrieving data from memory\nNumber: %s\nError code: %d", phone_str, ret);
+			if(!SIM800L_SMS(admin, sendStr, 1)){
+				return SIM800_ERROR_SENDING_SMS;
+			}
+			goto end_2;
+		}
+		read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
+
+		ret = delete_user("", &cli_data.page_address);
+		if(ret != OK){
+			sprintf(sendStr, "Error while deleting user\nNumber: %s\nError code: %d", phone_str, ret);
+			if(!SIM800L_SMS(admin, sendStr, 1)){
+				return SIM800_ERROR_SENDING_SMS;
+			}
+			goto end_2;
+		}
+
+		ret = remove_client_data_from_RAM(&cli_data, &data);
+		if(ret != OK) goto report_ram_error;
+
+		if(current_page -  1 != cli_data.page_address){
+			ret = get_user_data("", &cli_data.page_address, &last_client_data);
+			if(ret != OK){
+				sprintf(sendStr, "Error while retrieving data from memory on page: %d\n return code: %d", cli_data.page_address, ret);
+				if(!SIM800L_SMS(admin, sendStr, 1)){
+					return SIM800_ERROR_SENDING_SMS;
+				}
+				goto end_2;
+			}
+
+			ret = remove_client_data_from_RAM(&last_client_data, &data);
+			if(ret != OK) goto report_ram_error;
+
+			ret = move_client_data_to_RAM(&last_client_data, &data);
+			if(ret != OK) goto report_ram_error;
+		}
+
+		sprintf(sendStr, "Successfully removed user %s", number);
+		if(!SIM800L_SMS(admin, sendStr, 1)){
+			return SIM800_ERROR_SENDING_SMS;
+		}
+
+		D(printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   VOLUME  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"));
+		print_thresholds(data.volume_thresholds);
+
+		D(printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   TIME   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"));
+		print_thresholds(data.time_thresholds);
+
+		D(printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   ADDRESSES   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"));
+		print_number_page(data.number_addr);
+
+		goto end_2;
+
+		report_ram_error:
+		sprintf(sendStr, "Error while doing operation in RAM\nError no: %d", ret);
+		if(!SIM800L_SMS(admin, sendStr, 1)){
+			return SIM800_ERROR_SENDING_SMS;
+		}
+
+		end_2:;
 
 	}else if((strncmp(cmd, "cmd:SIM800L_SMS:", 16) == 0)){
 		char number[20] = {};

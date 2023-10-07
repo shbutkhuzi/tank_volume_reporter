@@ -11,7 +11,7 @@
 #include "main.h"
 
 
-#define TIMEDIST_PAIR_SIZE						360
+#define TIMEDIST_PAIR_SIZE						10
 
 
 

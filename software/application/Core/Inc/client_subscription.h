@@ -12,7 +12,7 @@
 #include "main.h"
 
 
-typedef struct __attribute__((packed)) client_struct{
+typedef struct client_struct{
 	uint16_t page_address;
     char phone_number[9];
     uint8_t enable;
@@ -60,7 +60,7 @@ general_status client_struct_to_str(const client * client_data, char * return_da
 general_status str_to_client_struct(const char * str_data, client * client_data);
 general_status add_user(char * phone, char * lower_limits, char * upper_limits);
 general_status phone_number_transformation(const char * phone, char * ret_phone);
-general_status delete_user(char * phone);
+general_status delete_user(char * phone, uint16_t * page_address);
 general_status read_user(char * phone);
 general_status user_data_print_repr(client * user_data, char * return_str);
 general_status write_user_enable(char * phone, uint8_t enable);

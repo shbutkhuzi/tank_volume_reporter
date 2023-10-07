@@ -11,7 +11,7 @@
 #include "stdint.h"
 #include "time_my.h"
 
-#define CONF_REPORT_MAX_LENGTH		1400 // (characters)
+#define CONF_REPORT_MAX_LENGTH		1100 // (characters)
 #define MAX_ADMINS					4
 
 void EEPROM_enable();

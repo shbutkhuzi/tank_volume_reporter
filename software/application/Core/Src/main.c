@@ -29,6 +29,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "stdlib.h"
 #include "stdio.h"
 #include "new_firmware.h"
 #include "SIM800L.h"
@@ -293,15 +294,15 @@ int main(void)
   subscription_enable = 1;
 
   rett = init_read_users(&data);
-  printf("init_read_users returned :%d\n", rett);
+  D(printf("init_read_users returned :%d\n", rett));
 
-  printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   VOLUME  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+  D(printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   VOLUME  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"));
   print_thresholds(data.volume_thresholds);
 
-  printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   TIME   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+  D(printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   TIME   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"));
   print_thresholds(data.time_thresholds);
 
-  printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   ADDRESSES   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+  D(printf("\n\n\n\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   ADDRESSES   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"));
   print_number_page(data.number_addr);
 
 
@@ -364,8 +365,10 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 
 
-  char confStr[CONF_REPORT_MAX_LENGTH];
+  char * confStr;
+  confStr = (char *)malloc(sizeof(char) * CONF_REPORT_MAX_LENGTH);
   read_all_conf(confStr);
+  free(confStr);
 
 
   SIM800L_init();

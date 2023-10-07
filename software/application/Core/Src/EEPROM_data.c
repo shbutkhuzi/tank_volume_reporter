@@ -45,6 +45,7 @@
 #include "Process_Data.h"
 #include "time_my.h"
 
+#define PAGE_SIZE 32
 
 char admins[MAX_ADMINS][14] = {};
 char provider[2][32] = {};
@@ -266,9 +267,9 @@ uint16_t read_page_end(uint8_t auto_en){
 }
 
 uint8_t read_subscr_meta_info(uint16_t* page_start, uint16_t* current_page, uint16_t* page_end, uint8_t auto_en){
-	char page_data[PAGESIZE];
+	char page_data[PAGE_SIZE];
 	if(auto_en) EEPROM_enable();
-	EEPROM_Read(24, 0, (uint8_t *)page_data, PAGESIZE);
+	EEPROM_Read(24, 0, (uint8_t *)page_data, PAGE_SIZE);
 	*page_start = ((*(page_data+4)) | *(page_data+5) >> 8);
 	*current_page = ((*(page_data+8)) | *(page_data+9) >> 8);
 	*page_end = ((*(page_data+12)) | *(page_data+13) >> 8);

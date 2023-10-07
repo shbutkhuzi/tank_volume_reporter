@@ -68,7 +68,7 @@ general_status get_user_data(char * phone, uint16_t * page_addr, client * client
 	char phone_str[9] = {};
 
 	memcpy(phone_str, phone, 8);
-	if(strlen(phone) != 8){
+	if((strlen(phone) != 8) && (page_addr == NULL)){
 		rett = phone_number_transformation(phone, phone_str);
 		if(rett != OK) return rett;
 	}
@@ -76,14 +76,10 @@ general_status get_user_data(char * phone, uint16_t * page_addr, client * client
 	// if page is specified, directly reading from that page
 	if(page_addr != NULL){
 		EEPROM_Read(*page_addr, 0, (uint8_t *)user_data, PAGE_SIZE);
-		if(strncmp(phone_str, user_data, 8) != 0){
-			goto find_user;
-		}else{
-			goto parse_data;
-		}
+		page_address = *page_addr;
+		goto parse_data;
 	}
 
-	find_user:
 	ret = find_user(phone_str, &page_address, user_data);
 	if(ret != OK) return SUBSCRIPTION_USER_DOES_NOT_EXIST;
 
@@ -332,7 +328,7 @@ general_status phone_number_transformation(const char * phone, char * ret_phone)
 }
 
 
-general_status delete_user(char * phone){
+general_status delete_user(char * phone, uint16_t * page_address){
 
 	general_status ret, rett;
 	char phone_str[9] = {};
@@ -340,16 +336,19 @@ general_status delete_user(char * phone){
 	char empty_or_latest[32] = {};
 	char user_data[32] = {};
 
-	rett = phone_number_transformation(phone, phone_str);
-	if(rett != OK) return rett;
-
-
 	EEPROM_enable();
 
-	rett = find_user(phone_str, &page_number, user_data);
-	if(rett != OK){
-		ret = rett;
-		goto return_from_function;
+	if(page_address == NULL){
+		rett = phone_number_transformation(phone, phone_str);
+		if(rett != OK) return rett;
+
+		rett = find_user(phone_str, &page_number, user_data);
+		if(rett != OK){
+			ret = rett;
+			goto return_from_function;
+		}
+	}else{
+		page_number = *page_address;
 	}
 
 	read_subscr_meta_info(&page_start, &current_page, &page_end, 0);
@@ -357,7 +356,7 @@ general_status delete_user(char * phone){
 	memset(empty_or_latest, 0, PAGE_SIZE);
 	EEPROM_Write(page_number, 0, (uint8_t *)empty_or_latest, PAGE_SIZE);
 
-	if(current_page-page_start > 1){
+	if(current_page - 1 != page_number){
 		EEPROM_Read(current_page-1, 0, (uint8_t *)empty_or_latest, PAGE_SIZE);
 
 		EEPROM_Write(page_number, 0, (uint8_t *)empty_or_latest, PAGE_SIZE);
@@ -804,6 +803,7 @@ void print_thresholds(threshold * head){
     }
 
     threshold * current = head;
+    numbers * current_num;
 
     do{
         D(printf("value:             %d\n", current->value));
@@ -813,7 +813,7 @@ void print_thresholds(threshold * head){
         // D(printf("Number pointer:    %d\n", current->num_ptr));
         if(current->num_ptr == NULL) {D(printf("                            No numbers for this threshold\n"));}
         else{
-            numbers * current_num = current->num_ptr;
+            current_num = current->num_ptr;
             D(printf("                            Numbers:\n"));
             do{
 
@@ -1011,19 +1011,27 @@ general_status move_client_data_to_RAM(client * client_data, data_addr * data){
 
 	data->number_addr = add_number_page(data->number_addr, client_data->phone_number, client_data->page_address);
 
+	if(data->number_addr == NULL){
+		return SUBSCRIPTION_ADD_NUMBER_PAGE_ERROR_WHILE_MOVING_CLIENT_DATA_TO_RAM;
+	}
+
 	for(uint8_t i = 0; i < 3; i++){
 		if(client_data->lowers[i] != 0){
 			if(client_data->lower_types[i] == 'V'){
 				data->volume_thresholds = add_threshold(data->volume_thresholds, 'L', client_data->lowers[i], client_data->phone_number);
+				if(data->volume_thresholds == NULL) return SUBSCRIPTION_ADD_THRESHOLD_ERROR_FOR_VOLUME_WHILE_MOVING_CLIENT_DATA_TO_RAM;
 			}else if(client_data->lower_types[i] == 'T'){
 				data->time_thresholds = add_threshold(data->time_thresholds, 'L', client_data->lowers[i], client_data->phone_number);
+				if(data->volume_thresholds == NULL) return SUBSCRIPTION_ADD_THRESHOLD_ERROR_FOR_TIME_WHILE_MOVING_CLIENT_DATA_TO_RAM;
 			}
 		}
 		if(client_data->uppers[i] != 0){
 			if(client_data->upper_types[i] == 'V'){
 				data->volume_thresholds = add_threshold(data->volume_thresholds, 'U', client_data->uppers[i], client_data->phone_number);
+				if(data->volume_thresholds == NULL) return SUBSCRIPTION_ADD_THRESHOLD_ERROR_FOR_VOLUME_WHILE_MOVING_CLIENT_DATA_TO_RAM;
 			}else if(client_data->upper_types[i] == 'T'){
 				data->time_thresholds = add_threshold(data->time_thresholds, 'U', client_data->uppers[i], client_data->phone_number);
+				if(data->volume_thresholds == NULL) return SUBSCRIPTION_ADD_THRESHOLD_ERROR_FOR_TIME_WHILE_MOVING_CLIENT_DATA_TO_RAM;
 			}
 		}
 	}
